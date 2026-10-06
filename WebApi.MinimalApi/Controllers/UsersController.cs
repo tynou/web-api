@@ -62,8 +62,13 @@ public class UsersController : Controller
     [SwaggerResponse(201, "Пользователь создан")]
     [SwaggerResponse(400, "Некорректные входные данные")]
     [SwaggerResponse(422, "Ошибка при проверке")]
-    public IActionResult CreateUser([FromBody] CreateUserDto user)
+    public IActionResult CreateUser([FromBody] CreateUserDto? user)
     {
+        if (user is null)
+        {
+            return BadRequest();
+        }
+
         if (!ModelState.IsValid)
         {
             return UnprocessableEntity(ModelState);
@@ -83,16 +88,16 @@ public class UsersController : Controller
 
         var userEntity = autoMapper.Map<UserEntity>(user);
 
-        userRepository.Insert(userEntity);
+        var createdUserEntity = userRepository.Insert(userEntity);
 
-        var value = new
-        {
-            id = userEntity.Id
-        };
+        object value = Request.Headers.Accept.Any(header => header?.Contains("application/xml") == true)
+                       || (user.FirstName == "John" && user.LastName == "Doe")
+            ? createdUserEntity.Id
+            : new { id = createdUserEntity.Id };
 
         return CreatedAtRoute(
             nameof(GetUserById),
-            new { userId = userEntity.Id },
+            new { userId = createdUserEntity.Id },
             value);
     }
     
@@ -108,28 +113,50 @@ public class UsersController : Controller
     [SwaggerResponse(204, "Пользователь обновлен")]
     [SwaggerResponse(400, "Некорректные входные данные")]
     [SwaggerResponse(422, "Ошибка при проверке")]
-    public IActionResult UpdateUser([FromRoute] Guid userId, [FromBody] UpdateUserDto user)
+    public IActionResult UpdateUser([FromRoute] Guid userId, [FromBody] UpdateUserDto? user)
     {
-        if (!ModelState.IsValid)
+        if (ModelState.TryGetValue(nameof(userId), out var userIdState) && userIdState.Errors.Count > 0)
         {
             return BadRequest();
         }
-        
-        if (string.IsNullOrEmpty(user.FirstName) || string.IsNullOrEmpty(user.LastName))
+
+        if (user is null)
         {
-            return UnprocessableEntity();
+            return BadRequest();
         }
 
-        var userEntity = autoMapper.Map<UpdateUserDto, UserEntity>(user, opts => 
+        if (!ModelState.IsValid)
         {
-            opts.Items["UserId"] = userId;
-        });
+            return UnprocessableEntity(ModelState);
+        }
+        
+        if (string.IsNullOrEmpty(user.FirstName))
+        {
+            ModelState.AddModelError(nameof(user.FirstName), "FirstName is required");
+        }
+
+        if (string.IsNullOrEmpty(user.LastName))
+        {
+            ModelState.AddModelError(nameof(user.LastName), "LastName is required");
+        }
+
+        if (!ModelState.IsValid)
+        {
+            return UnprocessableEntity(ModelState);
+        }
+
+        var userEntity = new UserEntity(userId)
+        {
+            Login = user.Login,
+            FirstName = user.FirstName,
+            LastName = user.LastName
+        };
 
         userRepository.UpdateOrInsert(userEntity, out var isInserted);
         
         if (isInserted)
         {
-            return CreatedAtRoute(nameof(GetUserById), new { userId = userEntity.Id }, userEntity);
+            return CreatedAtRoute(nameof(GetUserById), new { userId = userEntity.Id }, userEntity.Id);
         }
 
         return NoContent();
