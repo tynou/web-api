@@ -32,8 +32,18 @@ builder.Services.AddControllers(options =>
 
 builder.Services.AddAutoMapper(cfg =>
 {
-    cfg.CreateMap<UserEntity, UserDto>();
-    
+    cfg.CreateMap<UserEntity, UserDto>()
+        .ForMember(dest => dest.FullName,opt => opt.MapFrom(src => $"{src.FirstName} {src.LastName}"));
+   
+    cfg.CreateMap<UpdateUserDto, UserEntity>()
+        .ConstructUsing((src, ctx) => 
+        {
+            var id = ctx.Items.TryGetValue("UserId", out var objId) && objId is Guid guid 
+                ? guid 
+                : Guid.Empty;
+                
+            return new UserEntity(id);
+        });
 }, new System.Reflection.Assembly[0]);
 
 builder.Services.AddSwaggerGeneration();
