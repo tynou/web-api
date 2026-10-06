@@ -32,6 +32,8 @@ builder.Services.AddControllers(options =>
 
 builder.Services.AddAutoMapper(cfg =>
 {
+    cfg.CreateMap<CreateUserDto, UserEntity>();
+    
     cfg.CreateMap<UserEntity, UserDto>()
         .ForMember(dest => dest.FullName,opt => opt.MapFrom(src => $"{src.FirstName} {src.LastName}"));
    

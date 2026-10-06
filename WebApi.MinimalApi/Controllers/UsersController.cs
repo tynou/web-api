@@ -13,8 +13,7 @@ public class UsersController : Controller
 {
     private readonly IUserRepository userRepository;
     private readonly IMapper autoMapper;
-    
-    // Чтобы ASP.NET положил что-то в userRepository требуется конфигурация
+
     public UsersController(IUserRepository repo, IMapper mapper)
     {
         userRepository = repo;
@@ -33,10 +32,12 @@ public class UsersController : Controller
     public ActionResult<UserDto> GetUserById([FromRoute] Guid userId)
     {
         var user = userRepository.FindById(userId);
+
         if (user is null)
         {
             return NotFound();
         }
+
         return Ok(autoMapper.Map<UserDto>(user));
     }
 
@@ -61,9 +62,38 @@ public class UsersController : Controller
     [SwaggerResponse(201, "Пользователь создан")]
     [SwaggerResponse(400, "Некорректные входные данные")]
     [SwaggerResponse(422, "Ошибка при проверке")]
-    public IActionResult CreateUser([FromBody] object user)
+    public IActionResult CreateUser([FromBody] CreateUserDto user)
     {
-        throw new NotImplementedException();
+        if (!ModelState.IsValid)
+        {
+            return UnprocessableEntity(ModelState);
+        }
+
+        if (!user.Login.All(char.IsLetterOrDigit))
+        {
+            ModelState.AddModelError(
+                "Login",
+                "Login должен состоять только из букв и цифр.");
+        }
+
+        if (!ModelState.IsValid)
+        {
+            return UnprocessableEntity(ModelState);
+        }
+
+        var userEntity = autoMapper.Map<UserEntity>(user);
+
+        userRepository.Insert(userEntity);
+
+        var value = new
+        {
+            id = userEntity.Id
+        };
+
+        return CreatedAtRoute(
+            nameof(GetUserById),
+            new { userId = userEntity.Id },
+            value);
     }
     
     /// <summary>
