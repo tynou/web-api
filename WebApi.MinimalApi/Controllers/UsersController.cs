@@ -98,7 +98,7 @@ public class UsersController : Controller
         return CreatedAtRoute(
             nameof(GetUserById),
             new { userId = createdUserEntity.Id },
-            value);
+            createdUserEntity.Id);
     }
     
     /// <summary>
@@ -176,6 +176,60 @@ public class UsersController : Controller
     [SwaggerResponse(422, "Ошибка при проверке")]
     public IActionResult PartiallyUpdateUser([FromRoute] Guid userId, [FromBody] JsonPatchDocument<object> patchDoc)
     {
-        throw new NotImplementedException();
+        if (ModelState.TryGetValue(nameof(userId), out var userIdState) && userIdState.Errors.Count > 0)
+        {
+            return NotFound();
+        }
+
+        if (patchDoc is null)
+        {
+            return BadRequest();
+        }
+
+        var userEntity = userRepository.FindById(userId);
+        if (userEntity is null)
+        {
+            return NotFound();
+        }
+
+        var userUpdateDto = autoMapper.Map<UpdateUserDto>(userEntity);
+
+        patchDoc.ApplyTo(userUpdateDto, ModelState);
+
+        if (!ModelState.IsValid)
+        {
+            return UnprocessableEntity(ModelState);
+        }
+
+        TryValidateModel(userUpdateDto);
+
+        if (string.IsNullOrEmpty(userUpdateDto.Login))
+        {
+            ModelState.AddModelError("Login", "Login is required.");
+        }
+        else if (!userUpdateDto.Login.All(char.IsLetterOrDigit))
+        {
+            ModelState.AddModelError("Login", "Login должен состоять только из букв и цифр.");
+        }
+
+        if (string.IsNullOrEmpty(userUpdateDto.FirstName))
+        {
+            ModelState.AddModelError("FirstName", "FirstName is required.");
+        }
+
+        if (string.IsNullOrEmpty(userUpdateDto.LastName))
+        {
+            ModelState.AddModelError("LastName", "LastName is required.");
+        }
+
+        if (!ModelState.IsValid)
+        {
+            return UnprocessableEntity(ModelState);
+        }
+
+        autoMapper.Map(userUpdateDto, userEntity);
+        userRepository.UpdateOrInsert(userEntity, out _);
+
+        return NoContent();
     }
 }
