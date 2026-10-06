@@ -12,31 +12,77 @@ public class UsersController : Controller
 {
     private readonly IUserRepository userRepository;
     private readonly IMapper autoMapper;
-    
-    // Чтобы ASP.NET положил что-то в userRepository требуется конфигурация
+
     public UsersController(IUserRepository repo, IMapper mapper)
     {
         userRepository = repo;
         autoMapper = mapper;
     }
 
-    [HttpGet("{userId}")]
+    [HttpGet("{userId}", Name = nameof(GetUserById))]
     [Produces("application/json", "application/xml")]
     [SwaggerResponse(200, "OK", typeof(UserDto))]
     [SwaggerResponse(404, "Пользователь не найден")]
     public ActionResult<UserDto> GetUserById([FromRoute] Guid userId)
     {
         var user = userRepository.FindById(userId);
+
         if (user is null)
         {
             return NotFound();
         }
+
         return Ok(autoMapper.Map<UserDto>(user));
     }
 
+    /// <summary>
+    /// Создать пользователя
+    /// </summary>
+    /// <remarks>
+    /// Пример запроса:
+    ///
+    ///     POST /api/users
+    ///     {
+    ///        "login": "johndoe375",
+    ///        "firstName": "John",
+    ///        "lastName": "Doe"
+    ///     }
+    ///
+    /// </remarks>
+    /// <param name="user">Данные для создания пользователя</param>
     [HttpPost]
-    public IActionResult CreateUser([FromBody] object user)
+    [Produces("application/json", "application/xml")]
+    public IActionResult CreateUser([FromBody] CreateUserDto user)
     {
-        throw new NotImplementedException();
+        if (!ModelState.IsValid)
+        {
+            return UnprocessableEntity(ModelState);
+        }
+
+        if (!user.Login.All(char.IsLetterOrDigit))
+        {
+            ModelState.AddModelError(
+                "Login",
+                "Login должен состоять только из букв и цифр.");
+        }
+
+        if (!ModelState.IsValid)
+        {
+            return UnprocessableEntity(ModelState);
+        }
+
+        var userEntity = autoMapper.Map<UserEntity>(user);
+
+        userRepository.Insert(userEntity);
+
+        var value = new
+        {
+            id = userEntity.Id
+        };
+
+        return CreatedAtRoute(
+            nameof(GetUserById),
+            new { userId = userEntity.Id },
+            value);
     }
 }

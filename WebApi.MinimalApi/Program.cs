@@ -33,6 +33,7 @@ builder.Services.AddControllers(options =>
 builder.Services.AddAutoMapper(cfg =>
 {
     cfg.CreateMap<UserEntity, UserDto>();
+    cfg.CreateMap<CreateUserDto, UserEntity>();
     
 }, new System.Reflection.Assembly[0]);
 
