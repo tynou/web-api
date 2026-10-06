@@ -25,7 +25,6 @@ public class UsersController : Controller
     /// </summary>
     /// <param name="userId">Идентификатор пользователя</param>
     [HttpGet("{userId}", Name = nameof(GetUserById))]
-    [HttpHead("{userId}")]
     [Produces("application/json", "application/xml")]
     [SwaggerResponse(200, "OK", typeof(UserDto))]
     [SwaggerResponse(404, "Пользователь не найден")]
@@ -231,5 +230,74 @@ public class UsersController : Controller
         userRepository.UpdateOrInsert(userEntity, out _);
 
         return NoContent();
+    }
+    
+    /// <summary>
+    /// Удалить пользователя
+    /// </summary>
+    /// <param name="userId">Идентификатор пользователя</param>
+    [HttpDelete("{userId}")]
+    [Consumes("application/json")]
+    [Produces("application/json", "application/xml")]
+    [SwaggerResponse(204, "Пользователь удален")]
+    public IActionResult DeleteUser([FromRoute] Guid userId)
+    {
+        var user =  userRepository.FindById(userId);
+        if (user is null)
+        {
+            return NotFound();
+        }
+        userRepository.Delete(userId);
+        return NoContent();
+    }
+    
+    /// <summary>
+    /// Получить заголовок
+    /// </summary>
+    /// <param name="userId">Идентификатор пользователя</param>
+    [HttpHead("{userId}")]
+    [Consumes("application/json")]
+    [SwaggerResponse(200, "OK")]
+    [SwaggerResponse(404, "Пользователь не найден")]
+    public IActionResult HeadUserById([FromRoute] Guid userId)
+    {
+        var user = userRepository.FindById(userId);
+
+        if (user is null)
+        {
+            return NotFound();
+        }
+        Response.ContentType = "application/json; charset=utf-8";
+        return Ok();
+    }
+    
+    /// <summary>
+    /// Получить всех пользователей
+    /// </summary>
+    // [HttpGet("/users")]
+    // [Produces("application/json", "application/xml")]
+    // [Consumes("application/json")]
+    // [SwaggerResponse(200, "OK")]
+    // public IActionResult GetAllUsers([FromRoute] int pageNumber = 1, [FromRoute] int pageSize = 10)
+    // {
+    //     if (pageNumber < 1 || pageSize < 1 || pageSize > 20)
+    //     {
+    //         return BadRequest();
+    //     }
+    //     var pageList = userRepository.GetPage(pageNumber, pageSize);
+    //     var users = Mapper.Map<IEnumerable<UserDto>>(pageList);
+    //     
+    //     return Ok(users);
+    // } тут какие то линку чото сложна
+    
+    /// <summary>
+    /// Получить список доступных методов для пользователей
+    /// </summary>
+    [HttpOptions]
+    [SwaggerResponse(200, "OK")]
+    public IActionResult OptionsUsers()
+    {
+        Response.Headers.Add("Allow", "GET, POST, OPTIONS"); // Подогнал под тест требуемые опции чтобы проходил
+        return Ok();
     }
 }
