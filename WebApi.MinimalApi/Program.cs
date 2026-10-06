@@ -1,3 +1,5 @@
+using WebApi.MinimalApi.Samples;
+
 var builder = WebApplication.CreateBuilder(args);
 builder.WebHost.UseUrls("http://localhost:5000");
 builder.Services.AddControllers()
@@ -6,7 +8,11 @@ builder.Services.AddControllers()
         options.SuppressMapClientErrors = true;
     });
 
+builder.Services.AddSwaggerGeneration();
+
 var app = builder.Build();
+
+app.UseSwaggerWithUI();
 
 app.MapControllers();
 
