@@ -1,6 +1,7 @@
 ﻿using AutoMapper;
 using Microsoft.AspNetCore.JsonPatch;
 using Microsoft.AspNetCore.Mvc;
+using Newtonsoft.Json;
 using Swashbuckle.Swagger.Annotations;
 using WebApi.MinimalApi.Domain;
 using WebApi.MinimalApi.Models;
@@ -13,11 +14,13 @@ public class UsersController : Controller
 {
     private readonly IUserRepository userRepository;
     private readonly IMapper autoMapper;
+    private readonly LinkGenerator linkGenerator;
 
-    public UsersController(IUserRepository repo, IMapper mapper)
+    public UsersController(IUserRepository repo, IMapper mapper, LinkGenerator linkGen)
     {
         userRepository = repo;
         autoMapper = mapper;
+        linkGenerator = linkGen;
     }
 
     /// <summary>
@@ -89,11 +92,6 @@ public class UsersController : Controller
 
         var createdUserEntity = userRepository.Insert(userEntity);
 
-        object value = Request.Headers.Accept.Any(header => header?.Contains("application/xml") == true)
-                       || (user.FirstName == "John" && user.LastName == "Doe")
-            ? createdUserEntity.Id
-            : new { id = createdUserEntity.Id };
-
         return CreatedAtRoute(
             nameof(GetUserById),
             new { userId = createdUserEntity.Id },
@@ -122,21 +120,6 @@ public class UsersController : Controller
         if (user is null)
         {
             return BadRequest();
-        }
-
-        if (!ModelState.IsValid)
-        {
-            return UnprocessableEntity(ModelState);
-        }
-        
-        if (string.IsNullOrEmpty(user.FirstName))
-        {
-            ModelState.AddModelError(nameof(user.FirstName), "FirstName is required");
-        }
-
-        if (string.IsNullOrEmpty(user.LastName))
-        {
-            ModelState.AddModelError(nameof(user.LastName), "LastName is required");
         }
 
         if (!ModelState.IsValid)
@@ -195,31 +178,7 @@ public class UsersController : Controller
 
         patchDoc.ApplyTo(userUpdateDto, ModelState);
 
-        if (!ModelState.IsValid)
-        {
-            return UnprocessableEntity(ModelState);
-        }
-
         TryValidateModel(userUpdateDto);
-
-        if (string.IsNullOrEmpty(userUpdateDto.Login))
-        {
-            ModelState.AddModelError("Login", "Login is required.");
-        }
-        else if (!userUpdateDto.Login.All(char.IsLetterOrDigit))
-        {
-            ModelState.AddModelError("Login", "Login должен состоять только из букв и цифр.");
-        }
-
-        if (string.IsNullOrEmpty(userUpdateDto.FirstName))
-        {
-            ModelState.AddModelError("FirstName", "FirstName is required.");
-        }
-
-        if (string.IsNullOrEmpty(userUpdateDto.LastName))
-        {
-            ModelState.AddModelError("LastName", "LastName is required.");
-        }
 
         if (!ModelState.IsValid)
         {
@@ -227,7 +186,7 @@ public class UsersController : Controller
         }
 
         autoMapper.Map(userUpdateDto, userEntity);
-        userRepository.UpdateOrInsert(userEntity, out _);
+        userRepository.Update(userEntity);
 
         return NoContent();
     }
@@ -272,23 +231,52 @@ public class UsersController : Controller
     }
     
     /// <summary>
-    /// Получить всех пользователей
+    /// Получить пользователей
     /// </summary>
-    // [HttpGet("/users")]
-    // [Produces("application/json", "application/xml")]
-    // [Consumes("application/json")]
-    // [SwaggerResponse(200, "OK")]
-    // public IActionResult GetAllUsers([FromRoute] int pageNumber = 1, [FromRoute] int pageSize = 10)
-    // {
-    //     if (pageNumber < 1 || pageSize < 1 || pageSize > 20)
-    //     {
-    //         return BadRequest();
-    //     }
-    //     var pageList = userRepository.GetPage(pageNumber, pageSize);
-    //     var users = Mapper.Map<IEnumerable<UserDto>>(pageList);
-    //     
-    //     return Ok(users);
-    // } тут какие то линку чото сложна
+    /// <param name="pageNumber">Номер страницы, по умолчанию 1</param>
+    /// <param name="pageSize">Размер страницы, по умолчанию 20</param>
+    /// <response code="200">OK</response>
+    [HttpGet(Name = nameof(GetUsers))]
+    [Produces("application/json", "application/xml")]
+    [ProducesResponseType(typeof(IEnumerable<UserDto>), 200)]
+    public IActionResult GetUsers(int pageNumber = 1, int pageSize = 10)
+    {
+        if (pageNumber < 1)
+        {
+            pageNumber = 1;
+        }
+
+        pageSize = pageSize switch
+        {
+            < 1 => 1,
+            > 20 => 20,
+            _ => pageSize
+        };
+
+        var pageList = userRepository.GetPage(pageNumber, pageSize);
+        var users = autoMapper.Map<IEnumerable<UserDto>>(pageList);
+
+        var previousPageLink = pageNumber > 1
+            ? linkGenerator.GetUriByRouteValues(HttpContext, nameof(GetUsers), new { pageNumber = pageNumber - 1, pageSize })
+            : null;
+
+        var nextPageLink = pageNumber < pageList.TotalPages
+            ? linkGenerator.GetUriByRouteValues(HttpContext, nameof(GetUsers), new { pageNumber = pageNumber + 1, pageSize })
+            : null;
+        
+        var paginationHeader = new
+        {
+            previousPageLink = previousPageLink,
+            nextPageLink = nextPageLink,
+            totalCount = pageList.TotalCount,
+            pageSize = pageList.PageSize,
+            currentPage = pageList.CurrentPage,
+            totalPages = pageList.TotalPages,
+        };
+        Response.Headers.Append("X-Pagination", JsonConvert.SerializeObject(paginationHeader));
+        
+        return Ok(users);
+    }
     
     /// <summary>
     /// Получить список доступных методов для пользователей
@@ -297,7 +285,7 @@ public class UsersController : Controller
     [SwaggerResponse(200, "OK")]
     public IActionResult OptionsUsers()
     {
-        Response.Headers.Add("Allow", "GET, POST, OPTIONS"); // Подогнал под тест требуемые опции чтобы проходил
+        Response.Headers.Append("Allow", "GET, POST, OPTIONS"); // Подогнал под тест требуемые опции чтобы проходил
         return Ok();
     }
 }
